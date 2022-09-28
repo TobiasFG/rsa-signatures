@@ -1,14 +1,16 @@
 import requests as requests
+import secrets
+import base64
+import json
 
 # set LOCAL to localhost string on port 5000
 LOCAL = 'http://127.0.0.1:5000'
 LOCAL_PK = LOCAL + '/pk/'
 LOCAL_SIGN = LOCAL + '/sign_random_document_for_students/'
-SIGN_URL = 'http://localhost:5000/sign_random_document_for_students'
-QUOTE_URL = 'http://localhost:5000/quote/'
+LOCAL_QUOTE = LOCAL + '/quote/'
 
 TEST_MESSAGE = 'Hello, World!'
-TEST_MESSAGE_ILLEGAL = 'grade, 12, twelve, tolv'
+TEST_MESSAGE_ILLEGAL = 'You got a 12 because you are an excellent student! :)'
 
 # find the Type of any variable
 def typeOf(var):
@@ -30,83 +32,69 @@ def get_public_key():
         return None
     return response.json()['N'], response.json()['e']
 
-
-###########################   ERROR ABOVE  ###########################
-
-# The hex_msg will inevitably contain a "12" somewhere in the big message.
-# How is it possible to omit this? or is there a mistake with the assignment?
-
-######################################################################
-
-def sign_msg(msg: str): ## WORKS
-    msg_hex = msg.encode('utf-8').hex()
-
-    response = requests.get(LOCAL_SIGN + msg_hex + '/')
+def sign_hex(hex): ## WORKS
+    response = requests.get(LOCAL_SIGN + hex + '/')
     if response.status_code != 200: return None
     if response.text == '<p>Haha, nope!</p>': return 'Haha, nope!'
     
+    print(response.json())
     signature = response.json()['signature']
-    if (msg_hex == response.json()['msg']):
+    if (hex == response.json()['msg']):
         print('Messages match!')
 
     return signature
 
+def sign_string(msg: str): ## WORKS
+    msg_hex = msg.encode('utf-8').hex()
+    return sign_hex(msg_hex)
 
-#print(sign_msg(TEST_MESSAGE))
-#print(sign_msg(TEST_MESSAGE_ILLEGAL))
+print(sign_string(TEST_MESSAGE))
 
-def create_M_prime(msg, r, e, N):  # compute M' = M*r^e mod N
-    print("msg is of type: ", typeOf(msg), " and value: ", msg)
+def string_to_hex(string):
+    return string.encode('utf-8').hex()
+
+def create_r(n):
+    return secrets.randbelow(n)
+
+def create_M_prime(msg: str, r, e, N):  # compute M' = M*r^e mod N
     M = int.from_bytes(msg.encode(), 'big')
-    print("M is of type: ", typeOf(M), " and value: ", M)
     M_prime = (M * pow(r, e, N)) % N
-    # make M_prime a type string
-    M_prime = hex(M_prime)[2:]
+    return hex(M_prime)[2:]
 
-    print("M_prime is of type: ", typeOf(M_prime), " and value: ", M_prime)
-    return M_prime
+def json_to_cookie(j: str) -> str:
+    """Encode json data in a cookie-friendly way using base64."""
+    # The JSON data is a string -> encode it into bytes
+    json_as_bytes = j.encode()
+    # base64-encode the bytes
+    base64_as_bytes = base64.b64encode(json_as_bytes, altchars=b'-_')
+    # b64encode returns bytes again, but we need a string -> decode it
+    base64_as_str = base64_as_bytes.decode()
+    return base64_as_str
 
+def get_quote(msg, S):
+    reee = json.dumps({'msg': msg, 'signature': S})
+    cookie = {'grade': json_to_cookie(reee)}
 
-def create_S(S_prime, r, N):  # compute S = S'*r^-1 mod N
-    S = hex(int(S_prime, 16) * pow(r, N - 2, N) % N)[2:]
-    return S
+    response = requests.get(LOCAL_QUOTE, cookies=cookie)
+    if response.status_code != 200: return None
+    if response.text.__contains__("<quote>"): return response.text
+    return "Haha, nope!"
+    
 
+def launch_attack():
+    keys = get_public_key()
+    N = keys[0]
+    e = keys[1]
+    r = create_r(N)
+    M_prime_hex = create_M_prime(TEST_MESSAGE_ILLEGAL, r, e, N)
+    S_prime = sign_hex(M_prime_hex)
+    S_prime = bytes.fromhex(S_prime)
+    S_prime = int.from_bytes(S_prime, 'big')
+    S = S_prime*pow(r, -1, N) % N
+    S = hex(S)[2:]
 
-def launch_attack(message):
-    # get public key
-    N, e = get_public_key(LOCAL)
-    #print('This is the publickey: N=', N, ' and e=', e)
-
-    # compute r (random integer) between 0 and N
-    r = secrets.randbelow(N)
-    #print('This is r: ', r)
-
-    # compute M'
-    M_prime = create_M_prime(message, r, e, N)
-    #print('This is M_prime: ', M_prime)
-
-    # send M' to server and get signature S' for M'
-    S_prime = sign_msg(M_prime)
-    print('This is S_prime: ', S_prime)
-
-    # compute S = S'*r^-1 mod N
-    # Tried something else: S = pow(r, -1, N) * int(hex(S_prime), 16)
-    S = hex(int(S_prime, 16) * pow(r, N - 2, N) % N)[2:]
-    print('This is S: ', S)
-
-    # send M and S to server and get the flag
-    response = requests.get(
-        LOCAL + '/quote/', cookies={'grade': json.dumps({'msg': M, 'signature': S})})
-
-    # check if response is valid
-    if response.status_code != 200:
-        print('Error: Could not get flag something went wrong')
-        return None
-
-    # if response is valid return the flag
-    return response.text
+    print(get_quote(string_to_hex(TEST_MESSAGE_ILLEGAL), S))
+    
 
 
-#launch_attack(TEST_VALID_MESSAGE)
-# print('This is the publickey: ', get_public_key(LOCAL))
-# print('This is the signed message: ', sign_msg("jeg er gud"))
+launch_attack()
