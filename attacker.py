@@ -1,16 +1,14 @@
-from urllib import response
-from xml.dom.minidom import TypeInfo
 import requests as requests
-import secrets
-import base64
 
 # set LOCAL to localhost string on port 5000
-LOCAL = 'http://localhost:5000'
+LOCAL = 'http://127.0.0.1:5000'
+LOCAL_PK = LOCAL + '/pk/'
+LOCAL_SIGN = LOCAL + '/sign_random_document_for_students/'
 SIGN_URL = 'http://localhost:5000/sign_random_document_for_students'
 QUOTE_URL = 'http://localhost:5000/quote/'
-MESSAGE = 'You got a 12 because you are an excellent student! :)'
-TEST_VALID_MESSAGE = 'TEST'
 
+TEST_MESSAGE = 'Hello, World!'
+TEST_MESSAGE_ILLEGAL = 'grade, 12, twelve, tolv'
 
 # find the Type of any variable
 def typeOf(var):
@@ -23,28 +21,15 @@ def typeOf(var):
 # 4. Create M' such that M' = M*r^e mod N
 # 5. Send M' to server and get signature S' for M'
 # 6. Compute S = S'*r^-1 mod N
-# 7. Send M and S to server and get the flag
 
 
-def get_public_key(url):
-    # send request to server
-    response = requests.get(LOCAL + '/pk/')
-
-    # check if response is valid
+def get_public_key():
+    response = requests.get(LOCAL_PK)
     if response.status_code != 200:
         print('Error: Could not get public key something went wrong')
         return None
-
-    # if response is valid return the public key
     return response.json()['N'], response.json()['e']
 
-
-# Sends a msg to be signed by the server
-# Return message and signature hexadecimal encoded in a JSON object
-# Param msg is a string
-def sign_msg(msg):
-    hex_msg = msg.encode().hex()
-    print('hex_msg is of type: ', typeOf(hex_msg), " and value: ", hex_msg)
 
 ###########################   ERROR ABOVE  ###########################
 
@@ -53,25 +38,22 @@ def sign_msg(msg):
 
 ######################################################################
 
-    # send request to SIGN_URL with data as last part of URL
-    response = requests.get(SIGN_URL + '/' + hex_msg + '/')
-    # check if response is valid
-    if response.status_code != 200:
-        print('Error: Could not sign message something went wrong')
-        return None
+def sign_msg(msg: str): ## WORKS
+    msg_hex = msg.encode('utf-8').hex()
 
-    if response.text == '<p>Haha, nope!</p>':
-        # print('Haha, nope!')
-        return 'Haha, nope!'
-
-    # if response is valid turn signature into string object
+    response = requests.get(LOCAL_SIGN + msg_hex + '/')
+    if response.status_code != 200: return None
+    if response.text == '<p>Haha, nope!</p>': return 'Haha, nope!'
+    
     signature = response.json()['signature']
-
-    if (msg == response.json()['msg']):
+    if (msg_hex == response.json()['msg']):
         print('Messages match!')
 
     return signature
 
+
+#print(sign_msg(TEST_MESSAGE))
+#print(sign_msg(TEST_MESSAGE_ILLEGAL))
 
 def create_M_prime(msg, r, e, N):  # compute M' = M*r^e mod N
     print("msg is of type: ", typeOf(msg), " and value: ", msg)
@@ -125,6 +107,6 @@ def launch_attack(message):
     return response.text
 
 
-launch_attack(TEST_VALID_MESSAGE)
+#launch_attack(TEST_VALID_MESSAGE)
 # print('This is the publickey: ', get_public_key(LOCAL))
 # print('This is the signed message: ', sign_msg("jeg er gud"))
