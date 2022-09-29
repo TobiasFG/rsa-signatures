@@ -9,6 +9,11 @@ LOCAL_PK = LOCAL + '/pk/'
 LOCAL_SIGN = LOCAL + '/sign_random_document_for_students/'
 LOCAL_QUOTE = LOCAL + '/quote/'
 
+LIVE = 'https://cbc-rsa.netsec22.dk:8001'
+LIVE_PK = LIVE + '/pk/'
+LIVE_SIGN = LIVE + '/sign_random_document_for_students/'
+LIVE_QUOTE = LIVE + '/quote/'
+
 TEST_MESSAGE = 'Hello, World!'
 TEST_MESSAGE_ILLEGAL = 'You got a 12 because you are an excellent student! :)'
 
@@ -26,14 +31,14 @@ def typeOf(var):
 
 
 def get_public_key():
-    response = requests.get(LOCAL_PK)
+    response = requests.get(LIVE_PK, verify=False)
     if response.status_code != 200:
         print('Error: Could not get public key something went wrong')
         return None
     return response.json()['N'], response.json()['e']
 
 def sign_hex(hex): ## WORKS
-    response = requests.get(LOCAL_SIGN + hex + '/')
+    response = requests.get(LIVE_SIGN + hex + '/', verify=False)
     if response.status_code != 200: return None
     if response.text == '<p>Haha, nope!</p>': return 'Haha, nope!'
     
@@ -75,7 +80,7 @@ def get_quote(msg, S):
     reee = json.dumps({'msg': msg, 'signature': S})
     cookie = {'grade': json_to_cookie(reee)}
 
-    response = requests.get(LOCAL_QUOTE, cookies=cookie)
+    response = requests.get(LIVE_QUOTE, cookies=cookie, verify=False)
     if response.status_code != 200: return None
     if response.text.__contains__("<quote>"): return response.text
     return "Haha, nope!"
